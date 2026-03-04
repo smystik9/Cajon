@@ -2,9 +2,10 @@ r, c, template, name, handle, wSpan, hSpan, style
 1, 1, tools, Wide Top Tray, pull, 4, 1, metal
 2, 1, electronics, Left Power, knob, 2, 1, dark_wood
 2, 3, tools, Right Parts, knob, 2, 1, dark_wood
-3, 1, storage, Deep Cargo Box, pull, 2, 2, red_plastic
+3, 1, storage, Deep Cargo Box, pull, 2, 2, !red_plastic
 3, 3, tools, Small Drawer A, knob, 1, 1, default
 3, 4, tools, Small Drawer B, knob, 1, 1, default
 4, 3, tools, Wide Bottom, pull, 2, 1, metal
 5, 1, tools, Deep Cargo Box, pull, 2, 2, glass
 5, 3, tools, Deep Cargo Box, pull, 2, 2, glass
+
