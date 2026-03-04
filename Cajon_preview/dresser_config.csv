@@ -1,7 +1,8 @@
-row,col,template,name,handle_type
-0,0,SmallDrawer,Top Left Watch Box,knob
-0,1,SmallDrawer,Everyday Carry,knob
-0,2,SmallDrawer,Jewelry & Rings,knob
-0,3,SmallDrawer,Tech Accessories,knob
-1,0,DeepDrawer,Winter Sweaters,bar
-2,0,DeepDrawer,Denim & Jeans,bar
+r, c, template, name, handle, wSpan, hSpan
+0, 0, tools, Wide Top Tray, pull, 4, 1
+1, 0, electronics, Left Power, knob, 2, 1
+1, 2, tools, Right Parts, knob, 2, 1
+2, 0, storage, Deep Cargo Box, pull, 2, 2
+2, 2, tools, Small Drawer A, knob, 1, 1
+2, 3, tools, Small Drawer B, knob, 1, 1
+3, 2, tools, Wide Bottom, pull, 2, 1
