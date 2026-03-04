@@ -6,3 +6,5 @@ r, c, template, name, handle, wSpan, hSpan
 2, 2, tools, Small Drawer A, knob, 1, 1
 2, 3, tools, Small Drawer B, knob, 1, 1
 3, 2, tools, Wide Bottom, pull, 2, 1
+4, 0, tools, Deep Cargo Box, pull, 2, 2
+4, 2, tools, Deep Cargo Box, pull, 2, 2
