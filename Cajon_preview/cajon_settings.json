@@ -8,7 +8,7 @@
     "openDist": 15
   },
   "colors": {
-    "shell": "0x2d1b0f",
+    "shell": "0xaaaaaa",
     "drawer": "0x4e342e",
     "handle": "0xcccccc",
     "hover": "0x00d4ff"
@@ -17,4 +17,5 @@
     "cols": 4,
     "rows": 12
   }
+
 }
