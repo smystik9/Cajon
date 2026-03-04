@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cajon 3D Configurator</title>
+    <style>
+        /* --- GLOBAL STYLES --- */
+        body { margin: 0; background-color: #111; color: #eee; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+        
+        /* --- LAYOUT --- */
+        #viewport { position: relative; width: 100vw; height: 100vh; }
+        #canvas-container { width: 100%; height: 100%; cursor: crosshair; }
+
+        /* --- UI OVERLAYS --- */
+        .camera-controls { 
+            position: absolute; top: 20px; left: 20px; z-index: 10; display: flex; gap: 8px; 
+        }
+        .camera-controls button { 
+            background: rgba(0,0,0,0.6); color: #fff; border: 1px solid #555; 
+            padding: 8px 16px; cursor: pointer; border-radius: 4px; font-weight: bold;
+            backdrop-filter: blur(4px); transition: 0.2s;
+        }
+        .camera-controls button:hover { background: #00d4ff; color: #000; border-color: #00d4ff; }
+
+        #sidebar { 
+            position: absolute; top: 20px; right: 20px; width: 300px; 
+            background: rgba(30, 30, 30, 0.9); padding: 20px; border-radius: 8px; 
+            border: 1px solid #444; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            backdrop-filter: blur(10px);
+        }
+        #view-title { color: #00d4ff; margin-top: 0; border-bottom: 1px solid #444; padding-bottom: 10px; }
+        .rich-content img { max-width: 100%; border-radius: 4px; margin-top: 10px; border: 1px solid #555; }
+        
+        /* --- LOADING SCREEN --- */
+        #loader-overlay { 
+            position: absolute; inset: 0; z-index: 100; background: #111; 
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+        }
+        #progress-bar-container { width: 250px; height: 4px; background: #333; margin-top: 20px; border-radius: 2px; }
+        #progress-bar { width: 0%; height: 100%; background: #00d4ff; transition: width 0.3s; }
+        #status-msg { color: #888; font-size: 0.9em; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+    <div id="viewport">
+        <div id="loader-overlay">
+            <h2 style="margin:0;">Cajon 3D Engine</h2>
+            <div id="progress-bar-container"><div id="progress-bar"></div></div>
+            <div id="status-msg">Connecting to GitHub...</div>
+        </div>
+
+        <div class="camera-controls">
+            <button onclick="window.setCameraView('iso')">3D View</button>
+            <button onclick="window.setCameraView('front')">Front</button>
+            <button onclick="window.setCameraView('top')">Top</button>
+            <button onclick="window.setCameraView('side')">Side</button>
+        </div>
+
+        <div id="canvas-container"></div>
+
+        <div id="sidebar">
+            <div id="ui-default">
+                <h3 style="margin-top:0;">Interactive Toolbox</h3>
+                <p style="color:#aaa; line-height:1.5;">
+                    Welcome to the 3D Configurator.<br>
+                    • <strong>Hover</strong> to identify drawers.<br>
+                    • <strong>Click</strong> to open/close.<br>
+                    • <strong>Drag</strong> to rotate view.
+                </p>
+            </div>
+            <div id="ui-detail" style="display:none;">
+                <h2 id="view-title">Drawer Name</h2>
+                <div id="view-rich" class="rich-content">Loading...</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+    (function() {
+        const BASE_URL = "https://smystik9.github.io/Cajon/"; // Points to your repo
+        const PATHS = {
+            settings: BASE_URL + "Cajon_preview/cabinet_settings.csv",
+            styles: BASE_URL + "Cajon_preview/styles.csv",
+            drawers: BASE_URL + "Cajon_preview/dresser_config.csv",
+            templates: BASE_URL + "DrawerTemplates/"
+        };
+
+        // Default Config
+        let CONFIG = {
+            w: 48, h: 60, d: 22, frame: 1.5, gap: 0.5, openDist: 18,
+            cols: 4, rows: 12, dominantStyle: null,
+            colors: { shell: 0x2d1b0f, handle: 0xcccccc, hover: 0x00d4ff }
+        };
+
+        let STYLES = {}; 
+        let scene, camera, renderer, controls, raycaster, mouse = new THREE.Vector2();
+        let drawers = [], hoveredDrawer = null;
+        const texLoader = new THREE.TextureLoader();
+        texLoader.setCrossOrigin('anonymous'); // Vital for loading images from GitHub
+
+        function init() {
+            const container = document.getElementById('canvas-container');
+            
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x151515); // Slightly lighter bg for contrast
+            
+            camera = new THREE.PerspectiveCamera(40, container.clientWidth / container.clientHeight, 1, 1000);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.outputEncoding = THREE.sRGBEncoding;
+            renderer.shadowMap.enabled = true; // Enable shadows for realism
+            container.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.enablePan = false;
+
+            raycaster = new THREE.Raycaster();
+
+            // Better Lighting for Metal Textures
+            scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+            dirLight.position.set(50, 100, 50);
+            dirLight.castShadow = true;
+            scene.add(dirLight);
+            
+            const fillLight = new THREE.DirectionalLight(0x9999ff, 0.5);
+            fillLight.position.set(-50, 50, -50);
+            scene.add(fillLight);
+
+            loadAllData();
+
+            container.addEventListener('pointermove', onHover);
+            container.addEventListener('pointerdown', onClick);
+            window.addEventListener('resize', onResize);
+            animate();
+        }
+
+        async function loadAllData() {
+            try {
+                // 1. Settings
+                updateStatus("Loading Settings...");
+                const settingsRes = await fetch(PATHS.settings + "?v=" + Date.now());
+                parseSettings(await settingsRes.text());
+
+                // 2. Styles
+                updateStatus("Loading Styles...");
+                const stylesRes = await fetch(PATHS.styles + "?v=" + Date.now());
+                parseStyles(await stylesRes.text());
+
+                buildShell();
+                
+                // Reset Camera
+                camera.position.set(120, CONFIG.h + 50, 120);
+                controls.target.set(0, CONFIG.h / 2, 0);
+                controls.update();
+
+                // 3. Drawers
+                updateStatus("Building Cabinet...");
+                const drawersRes = await fetch(PATHS.drawers + "?v=" + Date.now());
+                parseDrawers(await drawersRes.text());
+
+                // Done
+                document.getElementById('loader-overlay').style.opacity = '0';
+                setTimeout(() => document.getElementById('loader-overlay').style.display='none', 500);
+
+            } catch (e) {
+                document.getElementById('status-msg').innerHTML = `<span style="color:red">Error: ${e.message}</span><br>Check console (F12) for details.`;
+                console.error(e);
+            }
+        }
+
+        function updateStatus(msg) {
+            document.getElementById('status-msg').innerText = msg;
+            const bar = document.getElementById('progress-bar');
+            let w = parseInt(bar.style.width || 0) + 30;
+            bar.style.width = w + "%";
+        }
+
+        function parseSettings(text) {
+            const lines = text.trim().split('\n').slice(1);
+            lines.forEach(line => {
+                const [prop, val] = line.split(',').map(s => s.trim());
+                if(prop === 'width') CONFIG.w = parseFloat(val);
+                if(prop === 'height') CONFIG.h = parseFloat(val);
+                if(prop === 'depth') CONFIG.d = parseFloat(val);
+                if(prop === 'frame') CONFIG.frame = parseFloat(val);
+                if(prop === 'gap') CONFIG.gap = parseFloat(val);
+                if(prop === 'openDist') CONFIG.openDist = parseFloat(val);
+                if(prop === 'cols') CONFIG.cols = parseInt(val);
+                if(prop === 'rows') CONFIG.rows = parseInt(val);
+                if(prop === 'dominant_style' && val !== '') CONFIG.dominantStyle = val;
+            });
+        }
+
+        function parseStyles(text) {
+            const lines = text.trim().split('\n').slice(1);
+            lines.forEach(line => {
+                const parts = line.split(',').map(s => s.trim());
+                if(parts.length >= 4) {
+                    STYLES[parts[0]] = {
+                        color: parseInt(parts[1]),
+                        roughness: parseFloat(parts[2]),
+                        metalness: parseFloat(parts[3])
+                    };
+                }
+            });
+            if(!STYLES['default']) STYLES['default'] = { color: 0x4e342e, roughness: 0.5, metalness: 0.1 };
+        }
+
+        function buildShell() {
+            const shell = new THREE.Mesh(
+                new THREE.BoxGeometry(CONFIG.w, CONFIG.h, CONFIG.d),
+                new THREE.MeshStandardMaterial({ color: CONFIG.colors.shell, side: THREE.BackSide })
+            );
+            shell.position.y = CONFIG.h / 2;
+            scene.add(shell);
+        }
+
+        function parseDrawers(text) {
+            const lines = text.trim().split('\n').slice(1);
+            const unitW = (CONFIG.w - (CONFIG.frame * 2) - (CONFIG.gap * (CONFIG.cols - 1))) / CONFIG.cols;
+            const unitH = (CONFIG.h - (CONFIG.frame * 2) - (CONFIG.gap * (CONFIG.rows - 1))) / CONFIG.rows;
+
+            lines.forEach(line => {
+                const p = line.split(',').map(s => s.trim());
+                if(p.length >= 5) {
+                    // 1-Based Indexing Conversion
+                    const r = parseInt(p[0]) - 1; 
+                    const c = parseInt(p[1]) - 1;
+                    const wSpan = p[5] ? parseInt(p[5]) : 1;
+                    const hSpan = p[6] ? parseInt(p[6]) : 1;
+                    
+                    let styleName = p[7] ? p[7] : 'default';
+                    
+                    // Style Priority: "!" Override > Dominant > Default
+                    if (styleName.startsWith('!')) {
+                        styleName = styleName.substring(1);
+                    } else if (CONFIG.dominantStyle) {
+                        styleName = CONFIG.dominantStyle;
+                    }
+
+                    if(r >= 0 && c >= 0) {
+                        addDrawer(r, c, p[2], p[3], p[4], unitW, unitH, wSpan, hSpan, styleName);
+                    }
+                }
+            });
+        }
+
+        function addDrawer(r, c, tmp, name, hType, unitW, unitH, wSpan, hSpan, styleName) {
+            const group = new THREE.Group();
+            const actualW = (unitW * wSpan) + (CONFIG.gap * (wSpan - 1));
+            const actualH = (unitH * hSpan) + (CONFIG.gap * (hSpan - 1));
+
+            const style = STYLES[styleName] || STYLES['default'];
+
+            const frontMat = new THREE.MeshStandardMaterial({ 
+                color: style.color, 
+                roughness: style.roughness, 
+                metalness: style.metalness 
+            });
+            const front = new THREE.Mesh(new THREE.BoxGeometry(actualW, actualH, 0.75), frontMat);
+            front.name = "active_face";
+            group.add(front);
+
+            // Interior Box
+            const box = new THREE.Mesh(
+                new THREE.BoxGeometry(actualW - 0.4, actualH - 0.4, CONFIG.d - 1),
+                new THREE.MeshStandardMaterial({ color: 0x333333, transparent: false }) // Solid dark interior
+            );
+            box.position.z = -(CONFIG.d / 2);
+            group.add(box);
+
+            // Handle
+            const hGeom = (hType === 'knob') ? new THREE.SphereGeometry(0.6) : new THREE.BoxGeometry(actualW * 0.4, 0.4, 0.4);
+            const handle = new THREE.Mesh(hGeom, new THREE.MeshStandardMaterial({ color: CONFIG.colors.handle, metalness: 0.8, roughness: 0.2 }));
+            handle.position.z = 0.6;
+            group.add(handle);
+
+            // Floor Texture (Only if template exists)
+            if(tmp !== 'none') {
+                const floor = new THREE.Mesh(
+                    new THREE.PlaneGeometry(actualW - 1, CONFIG.d - 2),
+                    new THREE.MeshStandardMaterial({ map: texLoader.load(PATHS.templates + tmp + "/interior.jpg") })
+                );
+                floor.rotation.x = -Math.PI / 2;
+                floor.position.set(0, -(actualH/2) + 0.1, -CONFIG.d / 2);
+                group.add(floor);
+            }
+
+            const xOffset = ((wSpan - 1) * (unitW + CONFIG.gap)) / 2;
+            const yOffset = ((hSpan - 1) * (unitH + CONFIG.gap)) / 2;
+            const x = -(CONFIG.w/2) + CONFIG.frame + (unitW/2) + (c * (unitW + CONFIG.gap)) + xOffset;
+            const y = CONFIG.h - CONFIG.frame - (unitH/2) - (r * (unitH + CONFIG.gap)) - yOffset;
+            
+            group.position.set(x, y, CONFIG.d/2);
+            group.userData = { 
+                name, isOpen: false, z0: CONFIG.d/2, 
+                url: PATHS.templates + tmp + "/rich_content.html" 
+            };
+            drawers.push(group);
+            scene.add(group);
+        }
+
+        // --- INTERACTION ---
+        function onHover(e) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const hits = raycaster.intersectObjects(scene.children, true);
+            
+            let foundDrawer = null;
+            if (hits.length > 0) {
+                let obj = hits[0].object;
+                while(obj.parent && !obj.userData.name) obj = obj.parent;
+                if(obj.userData.name) foundDrawer = obj;
+            }
+
+            if (hoveredDrawer !== foundDrawer) {
+                if (hoveredDrawer) setGlow(hoveredDrawer, false);
+                hoveredDrawer = foundDrawer;
+                if (hoveredDrawer) { setGlow(hoveredDrawer, true); document.body.style.cursor = 'pointer'; } 
+                else { document.body.style.cursor = 'default'; }
+            }
+        }
+
+        function setGlow(group, isActive) {
+            const front = group.children.find(c => c.name === "active_face");
+            if(front) {
+                if(isActive) { 
+                    front.material.emissive.setHex(CONFIG.colors.hover); 
+                    front.material.emissiveIntensity = 0.4; 
+                } else { 
+                    front.material.emissive.setHex(0x000000); 
+                    front.material.emissiveIntensity = 0; 
+                }
+            }
+        }
+
+        function onClick(e) {
+            // Left click only
+            if(e.button !== 0) return;
+            
+            if(hoveredDrawer) {
+                hoveredDrawer.userData.isOpen = !hoveredDrawer.userData.isOpen;
+                
+                // Update Sidebar UI
+                document.getElementById('ui-default').style.display = 'none';
+                document.getElementById('ui-detail').style.display = 'block';
+                document.getElementById('view-title').innerText = hoveredDrawer.userData.name;
+                document.getElementById('view-rich').innerHTML = '<span style="color:#888;">Fetching content...</span>';
+
+                fetch(hoveredDrawer.userData.url)
+                    .then(r => {
+                        if(!r.ok) throw new Error("404");
+                        return r.text();
+                    })
+                    .then(h => { document.getElementById('view-rich').innerHTML = h; })
+                    .catch(() => { 
+                        document.getElementById('view-rich').innerHTML = 
+                        '<span style="color:red;">Error 404: Content not found.</span><br><small>Check GitHub path: DrawerTemplates/[name]/rich_content.html</small>'; 
+                    });
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            drawers.forEach(d => {
+                const targetZ = d.userData.isOpen ? d.userData.z0 + CONFIG.openDist : d.userData.z0;
+                d.position.z += (targetZ - d.position.z) * 0.1;
+            });
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function onResize() {
+            const c = document.getElementById('canvas-container');
+            camera.aspect = c.clientWidth / c.clientHeight; 
+            camera.updateProjectionMatrix(); 
+            renderer.setSize(c.clientWidth, c.clientHeight);
+        }
+
+        window.setCameraView = function(mode) {
+            const h = CONFIG.h / 2;
+            if(mode === 'iso') camera.position.set(120, h + 50, 120);
+            if(mode === 'front') camera.position.set(0, h, 180);
+            if(mode === 'top') camera.position.set(0, 200, 0.1);
+            if(mode === 'side') camera.position.set(180, h, 0);
+            controls.target.set(0, h, 0);
+        };
+
+        // Start
+        init();
+    })();
+    </script>
+</body>
+</html>
