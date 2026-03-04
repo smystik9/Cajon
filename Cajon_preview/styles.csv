@@ -1,0 +1,6 @@
+name, color, roughness, metalness
+default, 0x4e342e, 0.5, 0.1
+dark_wood, 0x2d1b0f, 0.8, 0.0
+metal, 0x888888, 0.2, 0.8
+red_plastic, 0xaa0000, 0.1, 0.0
+glass, 0x88ccff, 0.0, 0.1
