@@ -1,0 +1,7 @@
+row,col,template,name,handle_type
+0,0,SmallDrawer,Top Left Watch Box,knob
+0,1,SmallDrawer,Everyday Carry,knob
+0,2,SmallDrawer,Jewelry & Rings,knob
+0,3,SmallDrawer,Tech Accessories,knob
+1,0,DeepDrawer,Winter Sweaters,bar
+2,0,DeepDrawer,Denim & Jeans,bar
