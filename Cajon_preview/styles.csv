@@ -1,5 +1,5 @@
 name, color, roughness, metalness
-default, 0x4e342e, 0.5, 0.1
+default, 0x39ff14, 0.2, 0.4
 toolbox_red, 0xcc0000, 0.2, 0.6
 industrial_blue, 0x003366, 0.3, 0.5
 classic_black, 0x111111, 0.1, 0.7
